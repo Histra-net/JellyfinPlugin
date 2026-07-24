@@ -11,7 +11,7 @@ description: >
   tracking API; playback past ~80% is automatically marked as watched.
 category: "General"
 owner: "histra.net"
-imageUrl: "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.png"
+imageUrl: "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.jpg"
 artifacts:
 - "Jellyfin.Plugin.HistraNet.dll"
 changelog: >
