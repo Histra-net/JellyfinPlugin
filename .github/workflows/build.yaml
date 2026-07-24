@@ -2,7 +2,10 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
+    # master, plus the automated manifest branches — a push runs the workflow
+    # (Actions-created PRs do not trigger workflows), so the manifest PR still
+    # gets the required "build" check and can pass branch protection.
+    branches: [ master, 'manifest/**' ]
   pull_request:
     branches: [ master ]
 
