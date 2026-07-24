@@ -3,11 +3,19 @@
     "guid": "1424eee8-bd97-4e50-a5d2-fae3d3acc8cf",
     "name": "histra.net",
     "description": "Sends movie and episode playback events from Jellyfin to your histra.net account. Reports start / pause / progress / stop; sufficiently completed playback is automatically marked as watched. Two-way sync of watched state and playback progress via a scheduled task, plus real-time export on watched/unwatched changes.",
-    "overview": "Scrobble playback to histra.net — media tracking like Trakt.",
+    "overview": "Scrobble playback to histra.net \u2014 media tracking like Trakt.",
     "owner": "histra.net",
     "category": "General",
     "imageUrl": "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.jpg",
     "versions": [
+      {
+        "version": "3.0.0.0",
+        "changelog": "Release 3.0.0.0 \u2014 see GitHub release notes.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/Histra-net/JellyfinPlugin/releases/download/v3.0.0.0/histra.net_3.0.0.0.zip",
+        "checksum": "f6fc9be5510d96b7fc5a2ad10d0cef3d",
+        "timestamp": "2026-07-24T15:35:30Z"
+      },
       {
         "version": "2.0.0.0",
         "changelog": "Faster sync: export only changed items, in parallel (persistent per-user state cache).",
