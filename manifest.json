@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.jpg",
     "versions": [
       {
+        "version": "3.0.0.0",
+        "changelog": "Much faster sync on large libraries: import resolves titles via an in-memory library index instead of one DB query per entry.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/Histra-net/JellyfinPlugin/releases/download/v3.0.0.0/histra.net_3.0.0.0.zip",
+        "checksum": "f6fc9be5510d96b7fc5a2ad10d0cef3d",
+        "timestamp": "2026-07-24T15:35:00Z"
+      },
+      {
         "version": "2.0.0.0",
         "changelog": "Faster sync: export only changed items, in parallel (persistent per-user state cache).",
         "targetAbi": "10.11.0.0",
