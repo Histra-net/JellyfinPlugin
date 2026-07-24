@@ -26,6 +26,7 @@ public class HistraSyncTask : IScheduledTask
     private const int PageSize = 100;
 
     private const int ExportConcurrency = 6;
+    private const int BatchSize = 100;
 
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
@@ -331,18 +332,53 @@ public class HistraSyncTask : IScheduledTask
             }
         }
 
-        // Phase 2: send the changed items to histra.net with bounded concurrency.
+        // Phase 2a: watched items go to histra.net in batches of BatchSize via
+        // the /sync/watched endpoint — one request per 100 items, not per item.
         var exported = 0;
+        var watchedChanges = changed.Where(c => c.Watched).ToList();
+        for (var i = 0; i < watchedChanges.Count; i += BatchSize)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var slice = watchedChanges.GetRange(i, Math.Min(BatchSize, watchedChanges.Count - i));
+
+            var request = new SyncWatchedRequest
+            {
+                Movies = slice.Select(c => MediaRefBuilder.BuildWatched(c.Item)?.Movie)
+                    .Where(m => m is not null).Select(m => m!).ToArray(),
+                Episodes = slice.Select(c => MediaRefBuilder.BuildWatched(c.Item))
+                    .Where(w => w?.Show is not null && w.Episode is not null)
+                    .Select(w => new SyncEpisode { Show = w!.Show, Season = w.Episode!.Season, Number = w.Episode.Number })
+                    .ToArray()
+            };
+
+            if (request.Movies.Length == 0 && request.Episodes.Length == 0)
+            {
+                continue;
+            }
+
+            var result = await _client.SyncWatchedAsync(token, true, request, cancellationToken).ConfigureAwait(false);
+            if (result is not null)
+            {
+                // Record the whole slice as exported (histra accepted the batch).
+                foreach (var c in slice)
+                {
+                    _exportState.Record(user.Id, c.Item.Id, c.Signature);
+                }
+
+                exported += slice.Count;
+            }
+        }
+
+        // Phase 2b: in-progress items still use per-item scrobble (no progress
+        // batch endpoint), bounded in parallel.
+        var progressChanges = changed.Where(c => !c.Watched).ToList();
         using (var gate = new SemaphoreSlim(ExportConcurrency))
         {
-            async Task SendOneAsync((BaseItem Item, bool Watched, double Percent, string Signature) c)
+            async Task SendProgressAsync((BaseItem Item, bool Watched, double Percent, string Signature) c)
             {
                 try
                 {
-                    var ok = c.Watched
-                        ? await ExportWatchedAsync(token, c.Item, cancellationToken).ConfigureAwait(false)
-                        : await ExportProgressAsync(token, c.Item, c.Percent, cancellationToken).ConfigureAwait(false);
-                    if (ok)
+                    if (await ExportProgressAsync(token, c.Item, c.Percent, cancellationToken).ConfigureAwait(false))
                     {
                         _exportState.Record(user.Id, c.Item.Id, c.Signature);
                         Interlocked.Increment(ref exported);
@@ -354,11 +390,11 @@ public class HistraSyncTask : IScheduledTask
                 }
             }
 
-            var tasks = new List<Task>(changed.Count);
-            foreach (var c in changed)
+            var tasks = new List<Task>(progressChanges.Count);
+            foreach (var c in progressChanges)
             {
                 await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-                tasks.Add(SendOneAsync(c));
+                tasks.Add(SendProgressAsync(c));
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -378,13 +414,6 @@ public class HistraSyncTask : IScheduledTask
         // Note: bulk "unwatched" export is intentionally NOT performed. Mass
         // DELETE /watched over the whole library would wipe histra state set by
         // other clients. Unwatched changes are exported in real time on toggle.
-    }
-
-    private async Task<bool> ExportWatchedAsync(string token, BaseItem item, CancellationToken cancellationToken)
-    {
-        var request = MediaRefBuilder.BuildWatched(item);
-        return request is not null
-            && await _client.SetWatchedAsync(token, true, request, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<bool> ExportProgressAsync(string token, BaseItem item, double percent, CancellationToken cancellationToken)
