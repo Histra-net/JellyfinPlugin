@@ -8,7 +8,7 @@ overview: "Scrobble playback to histra.net — media tracking like Trakt."
 description: >
   Sends movie and episode playback events from Jellyfin to your histra.net
   account. Reports start / pause / progress / stop over the histra.net
-  tracking API; playback past ~80% is automatically marked as watched.
+  tracking API; sufficiently completed playback is automatically marked as watched.
 category: "General"
 owner: "histra.net"
 imageUrl: "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.jpg"
