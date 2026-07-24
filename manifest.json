@@ -6,7 +6,7 @@
     "overview": "Scrobble playback to histra.net — media tracking like Trakt.",
     "owner": "histra.net",
     "category": "General",
-    "imageUrl": "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.png",
+    "imageUrl": "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.jpg",
     "versions": [
       {
         "version": "1.0.0.0",
