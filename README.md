@@ -104,6 +104,13 @@ directory (with a `meta.json`) and restart the server. Targets Jellyfin
 - Confirm the exact manager request/response field names against the real
   manager endpoint (currently `apptoken` / `userid` / `token`).
 
+## Releasing
+
+Run `release.bat 1.0.0.1` (or just `release.bat` and enter the version). It
+tags `v<version>` and pushes it; GitHub Actions then builds the DLL, packages
+the ZIP, publishes a GitHub Release, and updates `manifest.json` so Jellyfin
+clients see the new version. No manual checksum or upload needed.
+
 ## License
 
 [MIT](LICENSE) © histra.net
