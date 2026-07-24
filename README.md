@@ -28,7 +28,7 @@ Listens to Jellyfin playback events (`PlaybackStart` / `PlaybackProgress` /
 Titles are matched by their **provider ids** (TMDb / IMDb / TVDB) read from the
 Jellyfin item — histra.net looks them up itself, so no ids need to be stored
 locally. Movies scrobble by `movie`, episodes by `show` + `episode` (season +
-number). Playback past ~80 % is automatically marked as watched by histra.net
+number). Sufficiently completed playback is automatically marked as watched by histra.net
 on `stop`.
 
 Scrobbling is **per Jellyfin user**: each user's playback is sent under their

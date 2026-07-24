@@ -234,10 +234,25 @@ public class HistraClient
             using var response = await http.SendAsync(message, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning(
-                    "histra.net watched {Verb} failed: {StatusCode}",
-                    watched ? "POST" : "DELETE",
-                    (int)response.StatusCode);
+                if (Plugin.Instance?.Configuration.EnableDebugLogging ?? false)
+                {
+                    var sent = JsonSerializer.Serialize(request, _jsonOptions);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    _logger.LogWarning(
+                        "histra.net watched {Verb} failed: {StatusCode}; sent {Sent}; response {Body}",
+                        watched ? "POST" : "DELETE",
+                        (int)response.StatusCode,
+                        sent,
+                        body);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "histra.net watched {Verb} failed: {StatusCode}",
+                        watched ? "POST" : "DELETE",
+                        (int)response.StatusCode);
+                }
+
                 return false;
             }
 
