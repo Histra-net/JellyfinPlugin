@@ -3,6 +3,17 @@
 Scrobbles Jellyfin playback to [histra.net](https://histra.net) — media tracking
 like Trakt.
 
+## Install
+
+In Jellyfin: **Dashboard → Plugins → Repositories → +** and add this URL:
+
+```
+https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/manifest.json
+```
+
+Then **Catalog → histra.net → Install** and restart the server. Requires
+Jellyfin **10.11**.
+
 ## What it does
 
 Listens to Jellyfin playback events (`PlaybackStart` / `PlaybackProgress` /

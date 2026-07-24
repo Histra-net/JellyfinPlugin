@@ -1,0 +1,79 @@
+name: Release
+
+# Trigger by pushing a tag like v1.0.0.0
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build (Release)
+        run: dotnet build --configuration Release
+
+      - name: Package plugin ZIP
+        run: |
+          mkdir -p dist/histra.net
+          cp Jellyfin.Plugin.HistraNet/bin/Release/net9.0/Jellyfin.Plugin.HistraNet.dll dist/histra.net/
+          cp meta.template.json dist/histra.net/meta.json
+          cd dist
+          zip -j "histra.net_${{ steps.ver.outputs.version }}.zip" histra.net/Jellyfin.Plugin.HistraNet.dll histra.net/meta.json
+
+      - name: Create GitHub Release with ZIP asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/histra.net_${{ steps.ver.outputs.version }}.zip
+          generate_release_notes: true
+
+      - name: Update manifest.json (checksum + url) on master
+        run: |
+          VERSION="${{ steps.ver.outputs.version }}"
+          ZIP="dist/histra.net_${VERSION}.zip"
+          MD5=$(md5sum "$ZIP" | cut -d' ' -f1)
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/histra.net_${VERSION}.zip"
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          python3 - "$VERSION" "$MD5" "$URL" "$TS" <<'PY'
+          import json, sys
+          version, md5, url, ts = sys.argv[1:5]
+          with open("manifest.json") as f:
+              data = json.load(f)
+          entry = {
+              "version": version,
+              "changelog": f"Release {version} — see GitHub release notes.",
+              "targetAbi": "10.11.0.0",
+              "sourceUrl": url,
+              "checksum": md5,
+              "timestamp": ts,
+          }
+          versions = data[0].setdefault("versions", [])
+          versions = [v for v in versions if v.get("version") != version]
+          versions.insert(0, entry)
+          data[0]["versions"] = versions
+          with open("manifest.json", "w") as f:
+              json.dump(data, f, indent=2)
+              f.write("\n")
+          PY
+          git config user.name "histra.net"
+          git config user.email "noreply@histra.net"
+          git fetch origin master
+          git checkout master
+          git add manifest.json
+          git commit -m "Update manifest for ${GITHUB_REF_NAME}" || echo "no manifest change"
+          git push origin master
