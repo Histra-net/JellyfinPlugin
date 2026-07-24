@@ -136,15 +136,18 @@ public class HistraSyncTask : IScheduledTask
         LibraryIndex index,
         CancellationToken cancellationToken)
     {
-        // If both watched and unwatched imports are skipped, there is nothing to do here.
-        if (config.SkipWatchedImport)
+        // Both watched and unwatched import off → nothing to do.
+        if (config.SkipWatchedImport && config.SkipUnwatchedImport)
         {
-            _logger.LogInformation("histra.net: watched import skipped for user {User}", user.Username);
             return;
         }
 
+        // Page through histra history once. Mark matching library items played
+        // (unless watched import is skipped) and remember which library items are
+        // watched on histra — used below to reconcile unwatched state.
         var marked = 0;
         var offset = 0;
+        var watchedOnHistra = new HashSet<Guid>();
 
         while (true)
         {
@@ -171,7 +174,10 @@ public class HistraSyncTask : IScheduledTask
                     continue;
                 }
 
-                if (await MarkPlayedAsync(user, item, cancellationToken).ConfigureAwait(false))
+                watchedOnHistra.Add(item.Id);
+
+                if (!config.SkipWatchedImport
+                    && await MarkPlayedAsync(user, item, cancellationToken).ConfigureAwait(false))
                 {
                     marked++;
                 }
@@ -188,6 +194,54 @@ public class HistraSyncTask : IScheduledTask
         if (config.EnableDebugLogging || marked > 0)
         {
             _logger.LogInformation("histra.net: imported {Count} watched item(s) for user {User}", marked, user.Username);
+        }
+
+        // Unwatched reconciliation: when enabled, anything played locally that is
+        // NOT watched on histra gets unmarked, making Jellyfin mirror histra.
+        if (!config.SkipUnwatchedImport)
+        {
+            await ReconcileUnwatchedAsync(user, watchedOnHistra, config, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ReconcileUnwatchedAsync(
+        User user,
+        HashSet<Guid> watchedOnHistra,
+        Configuration.PluginConfiguration config,
+        CancellationToken cancellationToken)
+    {
+        var query = new InternalItemsQuery
+        {
+            IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Episode },
+            Recursive = true
+        };
+
+        var unmarked = 0;
+        foreach (var item in _libraryManager.GetItemList(query))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // Only touch items played locally that histra does NOT have as watched.
+            if (watchedOnHistra.Contains(item.Id))
+            {
+                continue;
+            }
+
+            var data = _userDataManager.GetUserData(user, item);
+            if (data is null || !data.Played)
+            {
+                continue;
+            }
+
+            if (await MarkUnplayedAsync(user, item, data, cancellationToken).ConfigureAwait(false))
+            {
+                unmarked++;
+            }
+        }
+
+        if (config.EnableDebugLogging || unmarked > 0)
+        {
+            _logger.LogInformation("histra.net: unmarked {Count} item(s) not watched on histra for user {User}", unmarked, user.Username);
         }
     }
 
@@ -438,10 +492,21 @@ public class HistraSyncTask : IScheduledTask
         }
 
         data.LastPlayedDate ??= DateTime.UtcNow;
+        return await SaveUserDataWithRetryAsync(user, item, data, cancellationToken).ConfigureAwait(false);
+    }
 
-        // SaveUserData writes to the shared SQLite database. A concurrent library
-        // scan can briefly hold the write lock, so retry transient "database is
-        // locked" errors instead of aborting the whole sync.
+    private async Task<bool> MarkUnplayedAsync(User user, BaseItem item, UserItemData data, CancellationToken cancellationToken)
+    {
+        data.Played = false;
+        data.PlaybackPositionTicks = 0;
+        return await SaveUserDataWithRetryAsync(user, item, data, cancellationToken).ConfigureAwait(false);
+    }
+
+    // SaveUserData writes to the shared SQLite database. A concurrent library scan
+    // can briefly hold the write lock, so retry transient "database is locked"
+    // errors instead of aborting the whole sync.
+    private async Task<bool> SaveUserDataWithRetryAsync(User user, BaseItem item, UserItemData data, CancellationToken cancellationToken)
+    {
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -455,7 +520,7 @@ public class HistraSyncTask : IScheduledTask
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "histra.net: failed to mark '{Name}' played", item.Name);
+                _logger.LogWarning(ex, "histra.net: failed to save user data for '{Name}'", item.Name);
                 return false;
             }
         }
