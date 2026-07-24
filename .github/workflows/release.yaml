@@ -25,14 +25,18 @@ jobs:
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build (Release)
-        run: dotnet build --configuration Release
+      - name: Build (Release, versioned from tag)
+        run: >
+          dotnet build --configuration Release
+          -p:Version=${{ steps.ver.outputs.version }}
+          -p:AssemblyVersion=${{ steps.ver.outputs.version }}
+          -p:FileVersion=${{ steps.ver.outputs.version }}
 
       - name: Package plugin ZIP
         run: |
           mkdir -p dist/histra.net
           cp Jellyfin.Plugin.HistraNet/bin/Release/net9.0/Jellyfin.Plugin.HistraNet.dll dist/histra.net/
-          cp meta.template.json dist/histra.net/meta.json
+          sed 's/"1.0.0.0"/"${{ steps.ver.outputs.version }}"/' meta.template.json > dist/histra.net/meta.json
           cd dist
           zip -j "histra.net_${{ steps.ver.outputs.version }}.zip" histra.net/Jellyfin.Plugin.HistraNet.dll histra.net/meta.json
 
