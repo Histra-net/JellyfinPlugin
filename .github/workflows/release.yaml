@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
@@ -46,13 +47,16 @@ jobs:
           files: dist/histra.net_${{ steps.ver.outputs.version }}.zip
           generate_release_notes: true
 
-      - name: Update manifest.json (checksum + url) on master
+      - name: Update manifest.json (checksum + url)
         run: |
           VERSION="${{ steps.ver.outputs.version }}"
           ZIP="dist/histra.net_${VERSION}.zip"
           MD5=$(md5sum "$ZIP" | cut -d' ' -f1)
           URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/histra.net_${VERSION}.zip"
           TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          # sync manifest with the latest master before editing
+          git fetch origin master
+          git checkout origin/master -- manifest.json
           python3 - "$VERSION" "$MD5" "$URL" "$TS" <<'PY'
           import json, sys
           version, md5, url, ts = sys.argv[1:5]
@@ -74,10 +78,16 @@ jobs:
               json.dump(data, f, indent=2)
               f.write("\n")
           PY
-          git config user.name "histra.net"
-          git config user.email "noreply@histra.net"
-          git fetch origin master
-          git checkout master
-          git add manifest.json
-          git commit -m "Update manifest for ${GITHUB_REF_NAME}" || echo "no manifest change"
-          git push origin master
+
+      # Open a PR with the manifest update — works with branch protection
+      # (a direct push to the protected master branch is rejected).
+      - name: Open manifest update PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "Update manifest for ${{ github.ref_name }}"
+          title: "Update manifest for ${{ github.ref_name }}"
+          body: "Automated manifest update (checksum + download URL) for release ${{ github.ref_name }}."
+          branch: "manifest/${{ github.ref_name }}"
+          base: master
+          add-paths: manifest.json
+          delete-branch: true
