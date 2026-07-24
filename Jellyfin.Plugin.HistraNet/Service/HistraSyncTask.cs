@@ -102,6 +102,10 @@ public class HistraSyncTask : IScheduledTask
             return;
         }
 
+        // Build the library index once for the whole run: import resolves titles
+        // by external id in-memory (O(1)) instead of one DB query per entry.
+        var index = LibraryIndex.Build(_libraryManager);
+
         var step = 100.0 / users.Count;
         var done = 0;
 
@@ -112,8 +116,8 @@ public class HistraSyncTask : IScheduledTask
             var token = await _tokenProvider.GetTokenAsync(user.Id, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(token))
             {
-                await ImportForUserAsync(user, token, config, cancellationToken).ConfigureAwait(false);
-                await ImportProgressForUserAsync(user, token, config, cancellationToken).ConfigureAwait(false);
+                await ImportForUserAsync(user, token, config, index, cancellationToken).ConfigureAwait(false);
+                await ImportProgressForUserAsync(user, token, config, index, cancellationToken).ConfigureAwait(false);
                 await ExportForUserAsync(user, token, config, cancellationToken).ConfigureAwait(false);
             }
 
@@ -128,6 +132,7 @@ public class HistraSyncTask : IScheduledTask
         User user,
         string token,
         Configuration.PluginConfiguration config,
+        LibraryIndex index,
         CancellationToken cancellationToken)
     {
         // If both watched and unwatched imports are skipped, there is nothing to do here.
@@ -158,8 +163,8 @@ public class HistraSyncTask : IScheduledTask
                 }
 
                 var item = entry.IsEpisode
-                    ? FindEpisode(entry.ExternalIds, entry.SeasonNumber, entry.EpisodeNumber)
-                    : FindMovie(entry.ExternalIds);
+                    ? index.FindEpisode(entry.ExternalIds, entry.SeasonNumber, entry.EpisodeNumber)
+                    : index.FindMovie(entry.ExternalIds);
                 if (item is null)
                 {
                     continue;
@@ -189,6 +194,7 @@ public class HistraSyncTask : IScheduledTask
         User user,
         string token,
         Configuration.PluginConfiguration config,
+        LibraryIndex index,
         CancellationToken cancellationToken)
     {
         if (config.SkipPlaybackProgressImport)
@@ -205,7 +211,7 @@ public class HistraSyncTask : IScheduledTask
             foreach (var it in movies.Items)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var item = FindMovie(it.ExternalIds);
+                var item = index.FindMovie(it.ExternalIds);
                 if (item is not null && await ApplyProgressAsync(user, item, it.Progress, cancellationToken).ConfigureAwait(false))
                 {
                     applied++;
@@ -219,7 +225,7 @@ public class HistraSyncTask : IScheduledTask
             foreach (var it in episodes.Items)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var item = FindEpisode(it.ExternalIds, it.SeasonNumber, it.EpisodeNumber);
+                var item = index.FindEpisode(it.ExternalIds, it.SeasonNumber, it.EpisodeNumber);
                 if (item is not null && await ApplyProgressAsync(user, item, it.Progress, cancellationToken).ConfigureAwait(false))
                 {
                     applied++;
@@ -388,68 +394,6 @@ public class HistraSyncTask : IScheduledTask
             && await _client.ScrobbleAsync(token, scrobble, cancellationToken).ConfigureAwait(false) is not null;
     }
 
-    private BaseItem? FindMovie(Dictionary<string, string>? externalIds)
-    {
-        if (externalIds is null)
-        {
-            return null;
-        }
-
-        var providerMap = BuildProviderMap(externalIds);
-        if (providerMap.Count == 0)
-        {
-            return null;
-        }
-
-        var query = new InternalItemsQuery
-        {
-            IncludeItemTypes = new[] { BaseItemKind.Movie },
-            HasAnyProviderId = providerMap,
-            Limit = 1
-        };
-
-        var results = _libraryManager.GetItemList(query);
-        return results.Count > 0 ? results[0] : null;
-    }
-
-    private Episode? FindEpisode(Dictionary<string, string>? externalIds, int? seasonNumber, int? episodeNumber)
-    {
-        if (externalIds is null || seasonNumber is not int season || episodeNumber is not int number)
-        {
-            return null;
-        }
-
-        var providerMap = BuildProviderMap(externalIds);
-        if (providerMap.Count == 0)
-        {
-            return null;
-        }
-
-        // Find the series by its external id, then the episode by S/E number.
-        var seriesQuery = new InternalItemsQuery
-        {
-            IncludeItemTypes = new[] { BaseItemKind.Series },
-            HasAnyProviderId = providerMap,
-            Limit = 1
-        };
-
-        var series = _libraryManager.GetItemList(seriesQuery).OfType<Series>().FirstOrDefault();
-        if (series is null)
-        {
-            return null;
-        }
-
-        var episodeQuery = new InternalItemsQuery
-        {
-            IncludeItemTypes = new[] { BaseItemKind.Episode },
-            AncestorIds = new[] { series.Id },
-            ParentIndexNumber = season,
-            IndexNumber = number
-        };
-
-        return _libraryManager.GetItemList(episodeQuery).OfType<Episode>().FirstOrDefault();
-    }
-
     private async Task<bool> MarkPlayedAsync(User user, BaseItem item, CancellationToken cancellationToken)
     {
         var data = _userDataManager.GetUserData(user, item);
@@ -502,28 +446,4 @@ public class HistraSyncTask : IScheduledTask
     private static bool IsTransientDbError(Exception ex) =>
         ex.GetType().Name.Contains("Sqlite", StringComparison.OrdinalIgnoreCase)
         && ex.Message.Contains("locked", StringComparison.OrdinalIgnoreCase);
-
-    private static Dictionary<string, string> BuildProviderMap(Dictionary<string, string> externalIds)
-    {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        // histra keys are lowercase (tmdb/imdb/tvdb); Jellyfin providers are Tmdb/Imdb/Tvdb.
-        AddIfPresent(map, externalIds, "tmdb", MetadataProvider.Tmdb);
-        AddIfPresent(map, externalIds, "imdb", MetadataProvider.Imdb);
-        AddIfPresent(map, externalIds, "tvdb", MetadataProvider.Tvdb);
-
-        return map;
-    }
-
-    private static void AddIfPresent(
-        Dictionary<string, string> map,
-        Dictionary<string, string> externalIds,
-        string histraKey,
-        MetadataProvider provider)
-    {
-        if (externalIds.TryGetValue(histraKey, out var value) && !string.IsNullOrEmpty(value))
-        {
-            map[provider.ToString()] = value;
-        }
-    }
 }
