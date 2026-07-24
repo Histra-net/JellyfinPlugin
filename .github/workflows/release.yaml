@@ -81,7 +81,10 @@ jobs:
 
       # Open a PR with the manifest update — works with branch protection
       # (a direct push to the protected master branch is rejected).
+      # Non-fatal: if the org disallows Actions from creating PRs, the release
+      # and ZIP still succeed and the manifest can be updated manually.
       - name: Open manifest update PR
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "Update manifest for ${{ github.ref_name }}"
