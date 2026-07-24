@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>histra.net</title>
+</head>
+<body>
+    <div id="HistraConfigPage" data-role="page" class="page type-interior pluginConfigurationPage"
+         data-require="emby-input,emby-button,emby-select,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="HistraConfigForm">
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h2 class="sectionTitle">histra.net tracking</h2>
+                        </div>
+                        <p class="fieldDescription">
+                            Scrobbles movie and episode playback to histra.net, like Trakt.
+                            Each Jellyfin user scrobbles under their own personal API token
+                            (create one in histra.net under Settings &rarr; API access).
+                            Users without a token are not scrobbled.
+                        </p>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="BaseUrl">Server URL</label>
+                        <input id="BaseUrl" name="BaseUrl" type="text" is="emby-input" />
+                        <div class="fieldDescription">Default: https://histra.net</div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="ScrobbleMovies" name="ScrobbleMovies" type="checkbox" is="emby-checkbox" />
+                            <span>Scrobble movies</span>
+                        </label>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="ScrobbleEpisodes" name="ScrobbleEpisodes" type="checkbox" is="emby-checkbox" />
+                            <span>Scrobble episodes</span>
+                        </label>
+                    </div>
+
+                    <div class="inputContainer">
+                        <label class="inputLabel inputLabelUnfocused" for="ProgressReportIntervalPercent">Progress report interval (%)</label>
+                        <input id="ProgressReportIntervalPercent" name="ProgressReportIntervalPercent"
+                               type="number" is="emby-input" min="1" max="50" />
+                        <div class="fieldDescription">Minimum percent change between progress updates sent to histra.net.</div>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h2 class="sectionTitle">Import (histra.net &rarr; Jellyfin)</h2>
+                        </div>
+                        <p class="fieldDescription">Applied when the "Sync with histra.net" scheduled task runs.</p>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="SkipUnwatchedImport" type="checkbox" is="emby-checkbox" />
+                                <span>Skip unwatched import from histra.net</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">If checked, do not set local items unwatched when they are unwatched on histra.net.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="SkipWatchedImport" type="checkbox" is="emby-checkbox" />
+                                <span>Skip watched import from histra.net</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">If checked, do not mark local items watched when they are watched on histra.net.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="SkipPlaybackProgressImport" type="checkbox" is="emby-checkbox" />
+                                <span>Skip playback progress import from histra.net</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">If checked, do not import in-progress playback position from histra.net.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h2 class="sectionTitle">Export (Jellyfin &rarr; histra.net)</h2>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ExportWatchedOnScheduledTask" type="checkbox" is="emby-checkbox" />
+                                <span>During scheduled task, set histra.net items to watched if local item is watched</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Controls what is synced to histra.net when the scheduled task runs.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ExportUnwatchedOnScheduledTask" type="checkbox" is="emby-checkbox" />
+                                <span>During scheduled task, set histra.net items to unwatched if local item is unwatched</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Controls what is synced to histra.net when the scheduled task runs.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ExportWatchedOnChange" type="checkbox" is="emby-checkbox" />
+                                <span>Set histra.net item to watched when local item is changed to watched</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Controls what is synced to histra.net when item statuses change during normal use.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ExportUnwatchedOnChange" type="checkbox" is="emby-checkbox" />
+                                <span>Set histra.net item to unwatched when local item is changed to unwatched</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Controls what is synced to histra.net when item statuses change during normal use.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h2 class="sectionTitle">Token source</h2>
+                        </div>
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="TokenSource">Where per-user tokens come from</label>
+                            <select is="emby-select" id="TokenSource" name="TokenSource" class="emby-select-withcolor emby-select">
+                                <option value="config">Configured here (per-user tokens below)</option>
+                                <option value="manager">Company manager (looked up per user)</option>
+                            </select>
+                        </div>
+                        <div id="ManagerFields">
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="ManagerUrl">Manager URL</label>
+                                <input id="ManagerUrl" name="ManagerUrl" type="text" is="emby-input" placeholder="https://your-manager/api/histra/token" />
+                                <div class="fieldDescription">Endpoint the plugin calls to look up a user's histra.net token.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="ManagerAppToken">Manager app token</label>
+                                <input id="ManagerAppToken" name="ManagerAppToken" type="password" is="emby-input" autocomplete="off" />
+                                <div class="fieldDescription">Shared service token the plugin sends so the manager can trust the request.</div>
+                            </div>
+
+                            <details class="fieldDescription" style="margin-top:0.5em;">
+                                <summary style="cursor:pointer;">How to implement the manager endpoint</summary>
+                                <div style="margin-top:0.5em;">
+                                    <p>The plugin sends a <strong>POST</strong> with <code>Content-Type: application/json</code> to the Manager URL. It asks: &ldquo;what is this Jellyfin user's histra.net token?&rdquo;</p>
+                                    <p><strong>Request body</strong> (the plugin sends this):</p>
+                                    <pre style="background:rgba(0,0,0,.25);padding:.75em;border-radius:4px;overflow:auto;">{
+  "apptoken": "&lt;the Manager app token above&gt;",
+  "userid": "&lt;Jellyfin user id, 32 hex chars, no dashes&gt;"
+}</pre>
+                                    <p><strong>Response</strong> the manager must return (HTTP 200):</p>
+                                    <pre style="background:rgba(0,0,0,.25);padding:.75em;border-radius:4px;overflow:auto;">{ "token": "hst_..." }      // user has a token
+{ "token": null }           // user has no token &rarr; not scrobbled</pre>
+                                    <p>Notes:</p>
+                                    <ul style="margin:.25em 0 0 1.2em;">
+                                        <li>The manager should verify <code>apptoken</code> and reject with <code>401</code> if it does not match.</li>
+                                        <li><code>userid</code> is the Jellyfin user id without dashes. If you store it with dashes, strip them (or compare case-insensitively) when looking up.</li>
+                                        <li>On any error / unreachable manager, that user is simply not scrobbled &mdash; nothing breaks.</li>
+                                        <li>Results are cached for ~10 minutes; a newly stored token may take up to that long (or a server restart) to take effect.</li>
+                                    </ul>
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding" id="PerUserTokensSection">
+                        <div class="sectionTitleContainer flex align-items-center">
+                            <h2 class="sectionTitle">Per-user tokens</h2>
+                        </div>
+                        <div id="UserTokenRows"></div>
+                    </div>
+
+                    <div class="checkboxContainer checkboxContainer-withDescription">
+                        <label class="emby-checkbox-label">
+                            <input id="EnableDebugLogging" type="checkbox" is="emby-checkbox" />
+                            <span>Enable debug logging</span>
+                        </label>
+                        <div class="fieldDescription checkboxFieldDescription">When enabled, all data sent to histra.net is logged.</div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var HistraConfig = {
+                pluginUniqueId: '1424eee8-bd97-4e50-a5d2-fae3d3acc8cf'
+            };
+
+            // Build the base URL from the form, normalized (no trailing slash).
+            function histraBaseUrl() {
+                var v = document.querySelector('#BaseUrl').value.replace(/\/+$/, '');
+                return v || 'https://histra.net';
+            }
+
+            // Show manager fields or the per-user token table depending on source.
+            function applyTokenSourceVisibility() {
+                var manager = document.querySelector('#TokenSource').value === 'manager';
+                document.querySelector('#ManagerFields').style.display = manager ? '' : 'none';
+                document.querySelector('#PerUserTokensSection').style.display = manager ? 'none' : '';
+            }
+
+            // Render one token row per Jellyfin user. tokensByUser: { userId: token }.
+            function renderUserRows(users, tokensByUser) {
+                var container = document.querySelector('#UserTokenRows');
+                container.innerHTML = '';
+
+                users.forEach(function (user) {
+                    var wrapper = document.createElement('div');
+                    wrapper.className = 'inputContainer';
+                    wrapper.setAttribute('data-userid', user.Id);
+
+                    var label = document.createElement('label');
+                    label.className = 'inputLabel inputLabelUnfocused';
+                    label.textContent = user.Name;
+
+                    var input = document.createElement('input');
+                    input.setAttribute('is', 'emby-input');
+                    input.type = 'password';
+                    input.className = 'histra-user-token';
+                    input.setAttribute('autocomplete', 'off');
+                    input.setAttribute('placeholder', 'hst_...');
+                    input.value = tokensByUser[user.Id] || '';
+
+                    var testBtn = document.createElement('button');
+                    testBtn.setAttribute('is', 'emby-button');
+                    testBtn.type = 'button';
+                    testBtn.className = 'raised emby-button';
+                    testBtn.style.marginTop = '0.5em';
+                    testBtn.innerHTML = '<span>Test</span>';
+                    testBtn.addEventListener('click', function () {
+                        testToken(input.value.trim());
+                    });
+
+                    wrapper.appendChild(label);
+                    wrapper.appendChild(input);
+                    wrapper.appendChild(testBtn);
+                    container.appendChild(wrapper);
+                });
+            }
+
+            // Verify a token via the plugin's own server-side endpoint. The check
+            // runs on the Jellyfin server (no browser CORS against histra.net) and
+            // is authenticated with the current Jellyfin session.
+            function testToken(token) {
+                if (!token) {
+                    Dashboard.alert({ title: 'histra.net', message: 'Enter a token first.' });
+                    return;
+                }
+
+                Dashboard.showLoadingMsg();
+                var url = ApiClient.getUrl('HistraNet/Test', { token: token });
+                ApiClient.getJSON(url).then(function (me) {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({
+                        title: 'histra.net',
+                        message: 'Connected as ' + (me.display_name || me.email || ('user #' + me.id)) + '.'
+                    });
+                }).catch(function () {
+                    Dashboard.hideLoadingMsg();
+                    Dashboard.alert({
+                        title: 'histra.net',
+                        message: 'Connection failed. Check the server URL and token, then Save first.'
+                    });
+                });
+            }
+
+            document.querySelector('#HistraConfigPage')
+                .addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    Promise.all([
+                        ApiClient.getPluginConfiguration(HistraConfig.pluginUniqueId),
+                        ApiClient.getUsers()
+                    ]).then(function (results) {
+                        var config = results[0];
+                        var users = results[1];
+
+                        document.querySelector('#BaseUrl').value = config.BaseUrl || 'https://histra.net';
+                        document.querySelector('#ProgressReportIntervalPercent').value = config.ProgressReportIntervalPercent || 10;
+
+                        document.querySelector('#TokenSource').value = config.TokenSource || 'config';
+                        document.querySelector('#ManagerUrl').value = config.ManagerUrl || '';
+                        document.querySelector('#ManagerAppToken').value = config.ManagerAppToken || '';
+                        applyTokenSourceVisibility();
+
+                        // Checkboxes whose default (when the stored value is undefined) is ON.
+                        ['ScrobbleMovies', 'ScrobbleEpisodes', 'SkipUnwatchedImport',
+                         'ExportWatchedOnScheduledTask', 'ExportUnwatchedOnScheduledTask',
+                         'ExportWatchedOnChange', 'ExportUnwatchedOnChange'].forEach(function (id) {
+                            document.querySelector('#' + id).checked = config[id] !== false;
+                        });
+                        // Checkboxes whose default is OFF.
+                        ['SkipWatchedImport', 'SkipPlaybackProgressImport', 'EnableDebugLogging'].forEach(function (id) {
+                            document.querySelector('#' + id).checked = config[id] === true;
+                        });
+
+                        var tokensByUser = {};
+                        (config.UserTokens || []).forEach(function (entry) {
+                            if (entry && entry.UserId) {
+                                // Normalize to dashless upper for matching Jellyfin user ids.
+                                var key = entry.UserId.replace(/-/g, '').toLowerCase();
+                                tokensByUser[key] = entry.Token || '';
+                            }
+                        });
+
+                        // Map Jellyfin user ids (which may contain dashes) to stored tokens.
+                        var normalized = {};
+                        users.forEach(function (user) {
+                            var key = user.Id.replace(/-/g, '').toLowerCase();
+                            normalized[user.Id] = tokensByUser[key] || '';
+                        });
+
+                        renderUserRows(users, normalized);
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            document.querySelector('#TokenSource')
+                .addEventListener('change', applyTokenSourceVisibility);
+
+            document.querySelector('#HistraConfigForm')
+                .addEventListener('submit', function (e) {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(HistraConfig.pluginUniqueId).then(function (config) {
+                        config.BaseUrl = histraBaseUrl();
+                        config.ProgressReportIntervalPercent = parseInt(document.querySelector('#ProgressReportIntervalPercent').value, 10) || 10;
+
+                        config.TokenSource = document.querySelector('#TokenSource').value;
+                        config.ManagerUrl = document.querySelector('#ManagerUrl').value.trim();
+                        config.ManagerAppToken = document.querySelector('#ManagerAppToken').value.trim();
+
+                        ['ScrobbleMovies', 'ScrobbleEpisodes',
+                         'SkipUnwatchedImport', 'SkipWatchedImport', 'SkipPlaybackProgressImport',
+                         'ExportWatchedOnScheduledTask', 'ExportUnwatchedOnScheduledTask',
+                         'ExportWatchedOnChange', 'ExportUnwatchedOnChange',
+                         'EnableDebugLogging'].forEach(function (id) {
+                            config[id] = document.querySelector('#' + id).checked;
+                        });
+
+                        var tokens = [];
+                        document.querySelectorAll('#UserTokenRows .inputContainer').forEach(function (row) {
+                            var userId = row.getAttribute('data-userid');
+                            var token = row.querySelector('.histra-user-token').value.trim();
+                            if (userId && token) {
+                                tokens.push({ UserId: userId, Token: token });
+                            }
+                        });
+                        config.UserTokens = tokens;
+
+                        ApiClient.updatePluginConfiguration(HistraConfig.pluginUniqueId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+
+                    e.preventDefault();
+                    return false;
+                });
+        </script>
+    </div>
+</body>
+</html>

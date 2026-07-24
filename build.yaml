@@ -1,0 +1,17 @@
+---
+name: "histra.net"
+guid: "1424eee8-bd97-4e50-a5d2-fae3d3acc8cf"
+version: "1.0.0.0"
+targetAbi: "10.11.0.0"
+framework: "net9.0"
+overview: "Scrobble playback to histra.net — media tracking like Trakt."
+description: >
+  Sends movie and episode playback events from Jellyfin to your histra.net
+  account. Reports start / pause / progress / stop over the histra.net
+  tracking API; playback past ~80% is automatically marked as watched.
+category: "General"
+owner: "histra.net"
+artifacts:
+- "Jellyfin.Plugin.HistraNet.dll"
+changelog: >
+  1.0.0.0 — Initial release: movie and episode scrobbling.

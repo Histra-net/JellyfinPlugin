@@ -1,0 +1,14 @@
+bin/
+obj/
+.vs/
+.idea/
+artifacts
+
+# Local tooling / not for publication
+.claude/
+
+# Bundled Jellyfin server used only for local testing — do NOT publish
+jellyfin-server/
+
+# Internal API specs
+OpenAPI/
