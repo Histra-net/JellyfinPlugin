@@ -322,6 +322,48 @@ public class HistraClient
         }
     }
 
+    /// <summary>
+    /// Marks a batch of titles watched or unwatched in a single request.
+    /// </summary>
+    /// <param name="token">The histra.net API token.</param>
+    /// <param name="watched">True → /sync/watched, false → /sync/unwatched.</param>
+    /// <param name="request">The batch of movies/episodes.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The response counts, or null on failure.</returns>
+    public async Task<SyncWatchedResponse?> SyncWatchedAsync(string token, bool watched, SyncWatchedRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        var path = watched ? "/api/v1/sync/watched" : "/api/v1/sync/unwatched";
+
+        try
+        {
+            using var http = CreateClient(token);
+            using var response = await http.PostAsJsonAsync(path, request, _jsonOptions, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("histra.net batch sync failed: {StatusCode}", (int)response.StatusCode);
+                return null;
+            }
+
+            return await response.Content
+                .ReadFromJsonAsync<SyncWatchedResponse>(_jsonOptions, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "histra.net batch sync request failed");
+            return null;
+        }
+    }
+
     private HttpClient CreateClient(string token)
     {
         var http = _httpClientFactory.CreateClient(NamedClient.Default);
