@@ -25,11 +25,14 @@ public class HistraSyncTask : IScheduledTask
 {
     private const int PageSize = 100;
 
+    private const int ExportConcurrency = 6;
+
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
     private readonly IUserDataManager _userDataManager;
     private readonly IUserTokenProvider _tokenProvider;
     private readonly HistraClient _client;
+    private readonly ExportStateStore _exportState;
     private readonly ILogger<HistraSyncTask> _logger;
 
     /// <summary>
@@ -40,6 +43,7 @@ public class HistraSyncTask : IScheduledTask
     /// <param name="userDataManager">The user data manager.</param>
     /// <param name="tokenProvider">The token provider.</param>
     /// <param name="client">The histra.net client.</param>
+    /// <param name="exportState">Remembers what was already exported per user.</param>
     /// <param name="logger">The logger.</param>
     public HistraSyncTask(
         IUserManager userManager,
@@ -47,6 +51,7 @@ public class HistraSyncTask : IScheduledTask
         IUserDataManager userDataManager,
         IUserTokenProvider tokenProvider,
         HistraClient client,
+        ExportStateStore exportState,
         ILogger<HistraSyncTask> logger)
     {
         _userManager = userManager;
@@ -54,6 +59,7 @@ public class HistraSyncTask : IScheduledTask
         _userDataManager = userDataManager;
         _tokenProvider = tokenProvider;
         _client = client;
+        _exportState = exportState;
         _logger = logger;
     }
 
@@ -280,12 +286,10 @@ public class HistraSyncTask : IScheduledTask
             return;
         }
 
-        // Enumerate movies and episodes for the user and keep those the user has
-        // played. IsPlayed is per-user data, so we read it via the user data
-        // manager (the InternalItemsQuery.IsPlayed filter proved unreliable here).
-        // Note: do NOT pass the user into the query ctor — that applies library
-        // visibility filtering that can drop most items. Query the library
-        // globally and resolve per-user played state via the user data manager.
+        // Enumerate movies and episodes for the user. IsPlayed is per-user data,
+        // so we read it via the user data manager (the InternalItemsQuery.IsPlayed
+        // filter proved unreliable here). Do NOT pass the user into the query ctor
+        // — that applies library visibility filtering that can drop most items.
         var query = new InternalItemsQuery
         {
             IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Episode },
@@ -293,10 +297,10 @@ public class HistraSyncTask : IScheduledTask
         };
 
         var items = _libraryManager.GetItemList(query);
-        var exported = 0;
-        var progressExported = 0;
-        var played = 0;
 
+        // Phase 1 (fast, in-memory): pick only the items whose exported state
+        // changed since last time. Skips everything already on histra.net.
+        var changed = new List<(BaseItem Item, bool Watched, double Percent, string Signature)>();
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -307,55 +311,81 @@ public class HistraSyncTask : IScheduledTask
                 continue;
             }
 
-            if (data.Played)
+            var watched = data.Played;
+            var percent = watched ? 0 : ToPercent(data.PlaybackPositionTicks, item.RunTimeTicks);
+            if (!watched && percent <= 0)
             {
-                played++;
-                var request = MediaRefBuilder.BuildWatched(item);
-                if (request is not null
-                    && await _client.SetWatchedAsync(token, true, request, cancellationToken).ConfigureAwait(false))
-                {
-                    exported++;
-                }
-
-                continue;
+                continue; // neither watched nor in-progress → nothing to export
             }
 
-            // In-progress item → push its resume position as a paused scrobble.
-            var percent = ToPercent(data.PlaybackPositionTicks, item.RunTimeTicks);
-            if (percent <= 0)
+            var signature = ExportStateStore.Signature(watched, percent);
+            if (_exportState.HasChanged(user.Id, item.Id, signature))
             {
-                continue;
-            }
-
-            var scrobble = MediaRefBuilder.BuildScrobble(item, "pause", percent);
-            if (scrobble is not null
-                && await _client.ScrobbleAsync(token, scrobble, cancellationToken).ConfigureAwait(false) is not null)
-            {
-                progressExported++;
+                changed.Add((item, watched, percent, signature));
             }
         }
 
-        if (config.EnableDebugLogging)
+        // Phase 2: send the changed items to histra.net with bounded concurrency.
+        var exported = 0;
+        using (var gate = new SemaphoreSlim(ExportConcurrency))
+        {
+            async Task SendOneAsync((BaseItem Item, bool Watched, double Percent, string Signature) c)
+            {
+                try
+                {
+                    var ok = c.Watched
+                        ? await ExportWatchedAsync(token, c.Item, cancellationToken).ConfigureAwait(false)
+                        : await ExportProgressAsync(token, c.Item, c.Percent, cancellationToken).ConfigureAwait(false);
+                    if (ok)
+                    {
+                        _exportState.Record(user.Id, c.Item.Id, c.Signature);
+                        Interlocked.Increment(ref exported);
+                    }
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            }
+
+            var tasks = new List<Task>(changed.Count);
+            foreach (var c in changed)
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                tasks.Add(SendOneAsync(c));
+            }
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+
+        _exportState.Save();
+
+        if (config.EnableDebugLogging || exported > 0)
         {
             _logger.LogInformation(
-                "histra.net: export scanned={Scanned}, watched={Watched}, progress={Progress}",
-                items.Count,
+                "histra.net: exported {Exported} changed item(s) (scanned {Scanned}) for user {User}",
                 exported,
-                progressExported);
+                items.Count,
+                user.Username);
         }
 
         // Note: bulk "unwatched" export is intentionally NOT performed. Mass
         // DELETE /watched over the whole library would wipe histra state set by
         // other clients. Unwatched changes are exported in real time on toggle.
-        if (config.ExportUnwatchedOnScheduledTask && config.EnableDebugLogging)
-        {
-            _logger.LogInformation("histra.net: bulk unwatched export skipped (handled on toggle, not in bulk)");
-        }
+    }
 
-        if (config.EnableDebugLogging || exported > 0)
-        {
-            _logger.LogInformation("histra.net: exported {Count} watched item(s) for user {User}", exported, user.Username);
-        }
+    private async Task<bool> ExportWatchedAsync(string token, BaseItem item, CancellationToken cancellationToken)
+    {
+        var request = MediaRefBuilder.BuildWatched(item);
+        return request is not null
+            && await _client.SetWatchedAsync(token, true, request, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> ExportProgressAsync(string token, BaseItem item, double percent, CancellationToken cancellationToken)
+    {
+        var scrobble = MediaRefBuilder.BuildScrobble(item, "pause", percent);
+        return scrobble is not null
+            && await _client.ScrobbleAsync(token, scrobble, cancellationToken).ConfigureAwait(false) is not null;
     }
 
     private BaseItem? FindMovie(Dictionary<string, string>? externalIds)

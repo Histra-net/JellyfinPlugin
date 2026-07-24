@@ -19,6 +19,7 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         // Token source is selected at call time by RoutingUserTokenProvider based
         // on the configured TokenSource ("config" per-user map, or "manager" HTTP
         // lookup). Both concrete providers are registered; the router picks one.
+        serviceCollection.AddSingleton<ExportStateStore>();
         serviceCollection.AddSingleton<ConfigUserTokenProvider>();
         serviceCollection.AddSingleton<ManagerUserTokenProvider>();
         serviceCollection.AddSingleton<IUserTokenProvider, RoutingUserTokenProvider>();
