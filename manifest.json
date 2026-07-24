@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.jpg",
     "versions": [
       {
+        "version": "2.0.0.0",
+        "changelog": "Faster sync: export only changed items, in parallel (persistent per-user state cache).",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/Histra-net/JellyfinPlugin/releases/download/v2.0.0.0/histra.net_2.0.0.0.zip",
+        "checksum": "24e1ab67a7e9c3522335a9818d8a27b9",
+        "timestamp": "2026-07-24T13:20:00Z"
+      },
+      {
         "version": "1.0.0.0",
         "changelog": "Initial release: scrobbling, two-way watched & playback-progress sync, per-user tokens (config or manager).",
         "targetAbi": "10.11.0.0",
