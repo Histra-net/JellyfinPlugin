@@ -103,3 +103,7 @@ directory (with a `meta.json`) and restart the server. Targets Jellyfin
 
 - Confirm the exact manager request/response field names against the real
   manager endpoint (currently `apptoken` / `userid` / `token`).
+
+## License
+
+[MIT](LICENSE) © histra.net
