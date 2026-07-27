@@ -54,9 +54,15 @@ public sealed class WatchStateExporter : IHostedService, IDisposable
 
     private void OnUserDataSaved(object? sender, UserDataSaveEventArgs e)
     {
-        // Only react to genuine user-driven changes. Skip our own import writes
-        // (Import) to avoid a sync feedback loop, and skip progress noise.
-        if (e.SaveReason is not (UserDataSaveReason.TogglePlayed or UserDataSaveReason.PlaybackFinished))
+        // React only to the user manually toggling watched/unwatched.
+        //
+        // PlaybackFinished is deliberately NOT handled: finishing playback already
+        // reaches histra.net through the scrobbler's "stop" action, which marks the
+        // title watched. Exporting here as well wrote the same watch twice and
+        // produced duplicate history entries.
+        //
+        // Import is also skipped, otherwise our own sync writes would loop back.
+        if (e.SaveReason is not UserDataSaveReason.TogglePlayed)
         {
             return;
         }
