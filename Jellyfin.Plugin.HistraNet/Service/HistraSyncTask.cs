@@ -117,9 +117,14 @@ public class HistraSyncTask : IScheduledTask
             var token = await _tokenProvider.GetTokenAsync(user.Id, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(token))
             {
-                await ImportForUserAsync(user, token, config, index, cancellationToken).ConfigureAwait(false);
+                // Read histra's watch history once: import marks these locally and
+                // export must NOT re-send them (histra counts a repeated watch as
+                // another play, which would duplicate history entries).
+                var watchedOnHistra = await FetchWatchedOnHistraAsync(token, index, cancellationToken).ConfigureAwait(false);
+
+                await ImportForUserAsync(user, config, index, watchedOnHistra, cancellationToken).ConfigureAwait(false);
                 await ImportProgressForUserAsync(user, token, config, index, cancellationToken).ConfigureAwait(false);
-                await ExportForUserAsync(user, token, config, cancellationToken).ConfigureAwait(false);
+                await ExportForUserAsync(user, token, config, watchedOnHistra, cancellationToken).ConfigureAwait(false);
             }
 
             done++;
@@ -129,25 +134,19 @@ public class HistraSyncTask : IScheduledTask
         progress.Report(100);
     }
 
-    private async Task ImportForUserAsync(
-        User user,
+    /// <summary>
+    /// Pages through the user's histra history and returns the library items that
+    /// histra already has as watched. Used by import (what to mark) and by export
+    /// (what must NOT be sent again — histra counts a repeated watch as another
+    /// play, which would duplicate history entries).
+    /// </summary>
+    private async Task<HashSet<Guid>> FetchWatchedOnHistraAsync(
         string token,
-        Configuration.PluginConfiguration config,
         LibraryIndex index,
         CancellationToken cancellationToken)
     {
-        // Both watched and unwatched import off → nothing to do.
-        if (config.SkipWatchedImport && config.SkipUnwatchedImport)
-        {
-            return;
-        }
-
-        // Page through histra history once. Mark matching library items played
-        // (unless watched import is skipped) and remember which library items are
-        // watched on histra — used below to reconcile unwatched state.
-        var marked = 0;
+        var watched = new HashSet<Guid>();
         var offset = 0;
-        var watchedOnHistra = new HashSet<Guid>();
 
         while (true)
         {
@@ -169,17 +168,9 @@ public class HistraSyncTask : IScheduledTask
                 var item = entry.IsEpisode
                     ? index.FindEpisode(entry.ExternalIds, entry.SeasonNumber, entry.EpisodeNumber)
                     : index.FindMovie(entry.ExternalIds);
-                if (item is null)
+                if (item is not null)
                 {
-                    continue;
-                }
-
-                watchedOnHistra.Add(item.Id);
-
-                if (!config.SkipWatchedImport
-                    && await MarkPlayedAsync(user, item, cancellationToken).ConfigureAwait(false))
-                {
-                    marked++;
+                    watched.Add(item.Id);
                 }
             }
 
@@ -189,6 +180,38 @@ public class HistraSyncTask : IScheduledTask
             }
 
             offset += PageSize;
+        }
+
+        return watched;
+    }
+
+    private async Task ImportForUserAsync(
+        User user,
+        Configuration.PluginConfiguration config,
+        LibraryIndex index,
+        HashSet<Guid> watchedOnHistra,
+        CancellationToken cancellationToken)
+    {
+        // Both watched and unwatched import off → nothing to do.
+        if (config.SkipWatchedImport && config.SkipUnwatchedImport)
+        {
+            return;
+        }
+
+        var marked = 0;
+        if (!config.SkipWatchedImport)
+        {
+            foreach (var itemId in watchedOnHistra)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var item = _libraryManager.GetItemById(itemId);
+                if (item is not null
+                    && await MarkPlayedAsync(user, item, cancellationToken).ConfigureAwait(false))
+                {
+                    marked++;
+                }
+            }
         }
 
         if (config.EnableDebugLogging || marked > 0)
@@ -340,6 +363,7 @@ public class HistraSyncTask : IScheduledTask
         User user,
         string token,
         Configuration.PluginConfiguration config,
+        HashSet<Guid> watchedOnHistra,
         CancellationToken cancellationToken)
     {
         if (!config.ExportWatchedOnScheduledTask)
@@ -377,6 +401,15 @@ public class HistraSyncTask : IScheduledTask
             if (!watched && percent <= 0)
             {
                 continue; // neither watched nor in-progress → nothing to export
+            }
+
+            // Already watched on histra → never send it again. A repeated watch
+            // counts as another play there and would duplicate history entries.
+            // This check does not depend on the local cache, which is lost when
+            // the plugin is updated or reinstalled.
+            if (watched && watchedOnHistra.Contains(item.Id))
+            {
+                continue;
             }
 
             var signature = ExportStateStore.Signature(watched, percent);
