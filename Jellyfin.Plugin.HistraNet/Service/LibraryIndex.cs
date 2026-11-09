@@ -19,6 +19,9 @@ public sealed class LibraryIndex
     // provider-id key ("tmdb:550") -> movie
     private readonly Dictionary<string, BaseItem> _moviesByProvider = new(StringComparer.OrdinalIgnoreCase);
 
+    // provider-id key ("tvdb:81189") -> series
+    private readonly Dictionary<string, Series> _seriesByProvider = new(StringComparer.OrdinalIgnoreCase);
+
     // episode key ("tmdb:1396|1|5") -> episode, keyed by the SERIES provider id + SxE
     private readonly Dictionary<string, Episode> _episodesBySeriesAndNumber = new(StringComparer.OrdinalIgnoreCase);
 
@@ -45,6 +48,24 @@ public sealed class LibraryIndex
             foreach (var key in ProviderKeys(movie))
             {
                 index._moviesByProvider.TryAdd(key, movie);
+            }
+        }
+
+        var allSeries = libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = new[] { BaseItemKind.Series },
+            Recursive = true
+        });
+        foreach (var item in allSeries)
+        {
+            if (item is not Series series)
+            {
+                continue;
+            }
+
+            foreach (var key in ProviderKeys(series))
+            {
+                index._seriesByProvider.TryAdd(key, series);
             }
         }
 
@@ -94,6 +115,29 @@ public sealed class LibraryIndex
             if (_moviesByProvider.TryGetValue(key, out var movie))
             {
                 return movie;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a series by its external ids, or null if not in the library.
+    /// </summary>
+    /// <param name="externalIds">The external ids (tmdb/imdb/tvdb).</param>
+    /// <returns>The series, or null.</returns>
+    public Series? FindSeries(IReadOnlyDictionary<string, string>? externalIds)
+    {
+        if (externalIds is null)
+        {
+            return null;
+        }
+
+        foreach (var key in ProviderKeys(externalIds))
+        {
+            if (_seriesByProvider.TryGetValue(key, out var series))
+            {
+                return series;
             }
         }
 

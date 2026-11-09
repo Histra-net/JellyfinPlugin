@@ -24,6 +24,7 @@ namespace Jellyfin.Plugin.HistraNet.Service;
 public class HistraSyncTask : IScheduledTask
 {
     private const int PageSize = 100;
+    private const int FavoritesPageSize = 150;
 
     private const int ExportConcurrency = 6;
     private const int BatchSize = 100;
@@ -71,7 +72,7 @@ public class HistraSyncTask : IScheduledTask
     public string Key => "HistraNetSync";
 
     /// <inheritdoc />
-    public string Description => "Imports watched state and playback progress from histra.net, and exports local watch state to histra.net.";
+    public string Description => "Imports watched state, playback progress and favorites from histra.net, and exports local watch state to histra.net.";
 
     /// <inheritdoc />
     public string Category => "histra.net";
@@ -124,6 +125,7 @@ public class HistraSyncTask : IScheduledTask
 
                 await ImportForUserAsync(user, config, index, watchedOnHistra, cancellationToken).ConfigureAwait(false);
                 await ImportProgressForUserAsync(user, token, config, index, cancellationToken).ConfigureAwait(false);
+                await ImportFavoritesForUserAsync(user, token, config, index, cancellationToken).ConfigureAwait(false);
                 await ExportForUserAsync(user, token, config, watchedOnHistra, cancellationToken).ConfigureAwait(false);
             }
 
@@ -357,6 +359,139 @@ public class HistraSyncTask : IScheduledTask
                 return false;
             }
         }
+    }
+
+    /// <summary>
+    /// Mirrors histra.net favorites onto the local heart (movies and series only).
+    /// Writes use <see cref="UserDataSaveReason.Import"/>, which the realtime
+    /// exporter ignores, so nothing imported here is ever sent back.
+    /// By default this only ADDS hearts; removing local favorites that are not on
+    /// histra.net is opt-in (<c>RemoveFavoritesOnImport</c>), because local hearts
+    /// that never reached histra.net would otherwise be wiped by the first sync.
+    /// </summary>
+    private async Task ImportFavoritesForUserAsync(
+        User user,
+        string token,
+        Configuration.PluginConfiguration config,
+        LibraryIndex index,
+        CancellationToken cancellationToken)
+    {
+        if (!config.ImportFavorites)
+        {
+            return;
+        }
+
+        var favoritesOnHistra = await FetchFavoritesOnHistraAsync(token, index, cancellationToken).ConfigureAwait(false);
+        if (favoritesOnHistra is null)
+        {
+            // Partial data must never drive the removal pass below.
+            _logger.LogWarning("histra.net: could not read favorites for user {User}, favorites import skipped", user.Username);
+            return;
+        }
+
+        var added = 0;
+        foreach (var itemId in favoritesOnHistra)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var item = _libraryManager.GetItemById(itemId);
+            if (item is not null
+                && await SetFavoriteAsync(user, item, true, cancellationToken).ConfigureAwait(false))
+            {
+                added++;
+            }
+        }
+
+        var removed = 0;
+        if (config.RemoveFavoritesOnImport)
+        {
+            // Only movies and series: favorite episodes, box sets, people… have no
+            // histra.net counterpart and must not be touched.
+            var query = new InternalItemsQuery
+            {
+                IncludeItemTypes = new[] { BaseItemKind.Movie, BaseItemKind.Series },
+                Recursive = true
+            };
+
+            foreach (var item in _libraryManager.GetItemList(query))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!favoritesOnHistra.Contains(item.Id)
+                    && await SetFavoriteAsync(user, item, false, cancellationToken).ConfigureAwait(false))
+                {
+                    removed++;
+                }
+            }
+        }
+
+        if (config.EnableDebugLogging || added > 0 || removed > 0)
+        {
+            _logger.LogInformation(
+                "histra.net: favorites import for user {User}: {Matched} matched in library, {Added} added, {Removed} removed",
+                user.Username,
+                favoritesOnHistra.Count,
+                added,
+                removed);
+        }
+    }
+
+    /// <summary>
+    /// Pages through the user's histra.net favorites and returns the matching
+    /// library items. Returns an empty set for a user with no favorites (the API
+    /// answers 200 with no items), and null if any page could not be read.
+    /// </summary>
+    private async Task<HashSet<Guid>?> FetchFavoritesOnHistraAsync(
+        string token,
+        LibraryIndex index,
+        CancellationToken cancellationToken)
+    {
+        var favorites = new HashSet<Guid>();
+        var offset = 0;
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var page = await _client.GetFavoritesPageAsync(token, FavoritesPageSize, offset, cancellationToken).ConfigureAwait(false);
+            if (page is null)
+            {
+                return null;
+            }
+
+            var items = page.Items ?? Array.Empty<FavoriteItem>();
+            foreach (var entry in items)
+            {
+                var item = entry.IsMovie ? index.FindMovie(entry.ExternalIds)
+                    : entry.IsShow ? index.FindSeries(entry.ExternalIds)
+                    : null;
+                if (item is not null)
+                {
+                    favorites.Add(item.Id);
+                }
+            }
+
+            offset += items.Length;
+            if (items.Length < FavoritesPageSize
+                || (page.List is not null && offset >= page.List.ItemCount))
+            {
+                break;
+            }
+        }
+
+        return favorites;
+    }
+
+    private async Task<bool> SetFavoriteAsync(User user, BaseItem item, bool favorite, CancellationToken cancellationToken)
+    {
+        var data = _userDataManager.GetUserData(user, item);
+        if (data is null || data.IsFavorite == favorite)
+        {
+            return false; // already in the desired state, no SQLite write
+        }
+
+        data.IsFavorite = favorite;
+        return await SaveUserDataWithRetryAsync(user, item, data, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ExportForUserAsync(

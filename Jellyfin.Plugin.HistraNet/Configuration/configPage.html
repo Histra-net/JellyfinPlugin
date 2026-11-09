@@ -120,6 +120,40 @@
 
                     <div class="verticalSection verticalSection-extrabottompadding">
                         <div class="sectionTitleContainer flex align-items-center">
+                            <h2 class="sectionTitle">Favorites</h2>
+                        </div>
+                        <p class="fieldDescription">
+                            Syncs the Jellyfin heart with histra.net Favorites. Only movies and series are synced;
+                            favorite episodes, seasons, collections and people are ignored. The histra.net watchlist is not affected.
+                        </p>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ExportFavoritesOnChange" type="checkbox" is="emby-checkbox" />
+                                <span>Add/remove histra.net favorite when the heart is toggled locally</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Controls what is synced to histra.net when favorites change during normal use.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="ImportFavorites" type="checkbox" is="emby-checkbox" />
+                                <span>During scheduled task, mark local items as favorite if they are favorites on histra.net</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Only adds hearts; existing local favorites are kept.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label class="emby-checkbox-label">
+                                <input id="RemoveFavoritesOnImport" type="checkbox" is="emby-checkbox" />
+                                <span>During scheduled task, remove local favorites that are not favorites on histra.net</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Makes Jellyfin mirror histra.net exactly. Warning: local favorites that never reached histra.net (e.g. hearted before this plugin was installed) will be removed.</div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <div class="sectionTitleContainer flex align-items-center">
                             <h2 class="sectionTitle">Token source</h2>
                         </div>
                         <div class="selectContainer">
@@ -293,11 +327,12 @@
                         // Checkboxes whose default (when the stored value is undefined) is ON.
                         ['ScrobbleMovies', 'ScrobbleEpisodes', 'SkipUnwatchedImport',
                          'ExportWatchedOnScheduledTask', 'ExportUnwatchedOnScheduledTask',
-                         'ExportWatchedOnChange', 'ExportUnwatchedOnChange'].forEach(function (id) {
+                         'ExportWatchedOnChange', 'ExportUnwatchedOnChange',
+                         'ExportFavoritesOnChange', 'ImportFavorites'].forEach(function (id) {
                             document.querySelector('#' + id).checked = config[id] !== false;
                         });
                         // Checkboxes whose default is OFF.
-                        ['SkipWatchedImport', 'SkipPlaybackProgressImport', 'EnableDebugLogging'].forEach(function (id) {
+                        ['SkipWatchedImport', 'SkipPlaybackProgressImport', 'RemoveFavoritesOnImport', 'EnableDebugLogging'].forEach(function (id) {
                             document.querySelector('#' + id).checked = config[id] === true;
                         });
 
@@ -340,6 +375,7 @@
                          'SkipUnwatchedImport', 'SkipWatchedImport', 'SkipPlaybackProgressImport',
                          'ExportWatchedOnScheduledTask', 'ExportUnwatchedOnScheduledTask',
                          'ExportWatchedOnChange', 'ExportUnwatchedOnChange',
+                         'ExportFavoritesOnChange', 'ImportFavorites', 'RemoveFavoritesOnImport',
                          'EnableDebugLogging'].forEach(function (id) {
                             config[id] = document.querySelector('#' + id).checked;
                         });

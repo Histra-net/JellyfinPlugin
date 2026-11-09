@@ -38,6 +38,13 @@ public class PluginConfiguration : BasePluginConfiguration
         ExportWatchedOnChange = true;
         ExportUnwatchedOnChange = true;
 
+        // Favorites (movies + shows only). Import only ADDS by default; removing
+        // local favorites that are missing on histra.net is opt-in, otherwise the
+        // first sync could wipe local hearts that never reached histra.net.
+        ExportFavoritesOnChange = true;
+        ImportFavorites = true;
+        RemoveFavoritesOnImport = false;
+
         EnableDebugLogging = false;
     }
 
@@ -132,6 +139,30 @@ public class PluginConfiguration : BasePluginConfiguration
     /// to histra.net immediately during normal use.
     /// </summary>
     public bool ExportUnwatchedOnChange { get; set; }
+
+    // ---------- Favorites (movies and shows only) ----------
+
+    /// <summary>
+    /// Gets or sets a value indicating whether toggling the heart on a local
+    /// movie or series immediately adds/removes it in histra.net favorites.
+    /// </summary>
+    public bool ExportFavoritesOnChange { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the scheduled task marks local
+    /// movies/series as favorite when they are favorites on histra.net.
+    /// </summary>
+    public bool ImportFavorites { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the scheduled task also REMOVES the
+    /// local favorite flag from movies/series that are not favorites on histra.net.
+    /// Off by default: local favorites that never reached histra.net (e.g. hearted
+    /// before the plugin was installed, or while histra.net was unreachable) would
+    /// otherwise be wiped by the first sync. Only applies when
+    /// <see cref="ImportFavorites"/> is on.
+    /// </summary>
+    public bool RemoveFavoritesOnImport { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether verbose debug logging is enabled.
