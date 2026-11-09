@@ -270,6 +270,164 @@ public class HistraClient
     }
 
     /// <summary>
+    /// Adds a title to (POST) or removes it from (DELETE) the user's histra.net
+    /// favorites. Both verbs are idempotent on the server: adding an existing
+    /// favorite or removing a missing one returns 200.
+    /// </summary>
+    /// <param name="token">The histra.net API token.</param>
+    /// <param name="favorite">True to add (POST), false to remove (DELETE).</param>
+    /// <param name="request">The favorite request body (movie or show).</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>True on success.</returns>
+    public async Task<bool> SetFavoriteAsync(string token, bool favorite, FavoriteRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var http = CreateClient(token);
+            using var content = JsonContent.Create(request, options: _jsonOptions);
+            using var message = new HttpRequestMessage(
+                favorite ? HttpMethod.Post : HttpMethod.Delete,
+                "/api/v1/favorites")
+            {
+                Content = content
+            };
+
+            using var response = await http.SendAsync(message, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                if (Plugin.Instance?.Configuration.EnableDebugLogging ?? false)
+                {
+                    var sent = JsonSerializer.Serialize(request, _jsonOptions);
+                    var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    _logger.LogWarning(
+                        "histra.net favorites {Verb} failed: {StatusCode}; sent {Sent}; response {Body}",
+                        favorite ? "POST" : "DELETE",
+                        (int)response.StatusCode,
+                        sent,
+                        body);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "histra.net favorites {Verb} failed: {StatusCode}",
+                        favorite ? "POST" : "DELETE",
+                        (int)response.StatusCode);
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "histra.net favorites request failed");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Checks whether a single histra.net title is in the user's favorites.
+    /// </summary>
+    /// <param name="token">The histra.net API token.</param>
+    /// <param name="mediaType">"movie" or "show".</param>
+    /// <param name="mediaId">The histra media id.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The favorite flag, or null on failure.</returns>
+    public async Task<bool?> GetFavoriteStatusAsync(string token, string mediaType, long mediaId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(mediaType))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var http = CreateClient(token);
+            var url = string.Format(
+                CultureInfo.InvariantCulture,
+                "/api/v1/favorites/status?media_type={0}&media_id={1}",
+                Uri.EscapeDataString(mediaType),
+                mediaId);
+            using var response = await http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("histra.net favorite status request failed: {StatusCode}", (int)response.StatusCode);
+                return null;
+            }
+
+            var status = await response.Content
+                .ReadFromJsonAsync<FavoriteStatus>(_jsonOptions, cancellationToken)
+                .ConfigureAwait(false);
+            return status?.Favorite;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "histra.net favorite status request failed");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Fetches one page of the user's favorites (extended=full, with external ids).
+    /// An empty favorites list is returned as a page with no items, not as an error.
+    /// </summary>
+    /// <param name="token">The histra.net API token.</param>
+    /// <param name="limit">Page size.</param>
+    /// <param name="offset">Page offset.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The favorites page, or null on failure.</returns>
+    public async Task<FavoritesResponse?> GetFavoritesPageAsync(string token, int limit, int offset, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var http = CreateClient(token);
+            var url = string.Format(
+                CultureInfo.InvariantCulture,
+                "/api/v1/favorites?extended=full&limit={0}&offset={1}",
+                limit,
+                offset);
+            using var response = await http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("histra.net favorites request failed: {StatusCode}", (int)response.StatusCode);
+                return null;
+            }
+
+            return await response.Content
+                .ReadFromJsonAsync<FavoritesResponse>(_jsonOptions, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "histra.net favorites request failed");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Fetches in-progress movies (continue watching).
     /// </summary>
     /// <param name="token">The histra.net API token.</param>

@@ -50,6 +50,9 @@ Dashboard → Plugins → **histra.net**:
 - **Export (Jellyfin → histra.net)** — set watched/unwatched during the
   scheduled task, and set watched/unwatched immediately on change during
   normal use.
+- **Favorites** — export heart toggles to histra.net immediately, import
+  histra.net favorites during the scheduled task, and (off by default) remove
+  local favorites that are not favorites on histra.net.
 - **Enable debug logging** — verbose logging of sync/scrobble activity.
 
 ## Synchronization
@@ -73,6 +76,29 @@ Two directions, matching Trakt:
     watched. Bulk unwatched export is intentionally not performed (that would
     risk wiping histra state set by other clients); unwatched is handled by the
     realtime exporter on toggle.
+  - **Favorites import** — pages through `GET /api/v1/favorites?extended=full`,
+    matches movies/series by `external_ids` and sets the local heart where it
+    is not set yet (no needless writes). Removal is opt-in, see below.
+
+### Favorites
+
+The Jellyfin heart (`IsFavorite`) is synced with histra.net **Favorites** — a
+list separate from the histra.net watchlist, which this plugin does not touch.
+
+- Only **movies and series** are synced. Episodes, seasons, box sets, people
+  etc. can be hearted in Jellyfin but have no histra.net counterpart; they are
+  silently ignored in both directions.
+- **Export** reacts to `UserDataSaveReason.UpdateUserRating` (the heart button
+  in Jellyfin 10.11) and to `UpdateUserData` (generic user-data update some
+  clients use). Rapid on/off toggles are serialized and only the latest state
+  is sent, so both sides end up consistent.
+- **Import** writes with `UserDataSaveReason.Import`, which the exporter ignores
+  — imported hearts are never sent back, so repeated syncs cannot loop.
+- **Removal on import is off by default.** With it on, Jellyfin mirrors
+  histra.net exactly, which means local favorites that never reached histra.net
+  (hearted before the plugin was installed, or while histra.net was unreachable)
+  are removed by the next sync. Removal is never done when the favorites list
+  could not be read completely.
 
 ### Token source
 

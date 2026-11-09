@@ -53,6 +53,35 @@ public static class MediaRefBuilder
     }
 
     /// <summary>
+    /// Builds a favorites request for a library item, or null when the item can
+    /// not be a histra.net favorite. Only <see cref="Movie"/> and
+    /// <see cref="Series"/> qualify — episodes, seasons, box sets, people, etc.
+    /// can be hearted in Jellyfin but have no histra.net counterpart.
+    /// </summary>
+    /// <param name="item">The library item.</param>
+    /// <returns>The favorite request, or null when the item cannot be referenced.</returns>
+    public static FavoriteRequest? BuildFavorite(BaseItem item)
+    {
+        switch (item)
+        {
+            case Movie movie:
+            {
+                var reference = BuildRef(movie);
+                return reference is null ? null : new FavoriteRequest { Movie = reference };
+            }
+
+            case Series series:
+            {
+                var reference = BuildRef(series);
+                return reference is null ? null : new FavoriteRequest { Show = reference };
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>
     /// Builds a scrobble request for a library item with the given action and
     /// progress, or null if it cannot be referenced.
     /// </summary>
