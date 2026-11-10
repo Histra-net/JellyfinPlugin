@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/Histra-net/JellyfinPlugin/master/logo.jpg",
     "versions": [
       {
+        "version": "7.0.0.0",
+        "changelog": "Release 7.0.0.0 \u2014 see GitHub release notes.",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/Histra-net/JellyfinPlugin/releases/download/v7.0.0.0/histra.net_7.0.0.0.zip",
+        "checksum": "9d1033a432b521058846392d59a27c30",
+        "timestamp": "2026-11-09T20:27:27Z"
+      },
+      {
         "version": "6.0.0.0",
         "changelog": "Release 6.0.0.0 \u2014 see GitHub release notes.",
         "targetAbi": "10.11.0.0",
